@@ -1,0 +1,33 @@
+# Split DNS sidecar — routes local domains to LAN DNS, everything else to Mullvad.
+# Started by install-server.sh only when DNS_MODE=split.
+#
+# Runs in gluetun's network namespace on port 5353.
+# Gluetun's built-in DNS proxy (:53) uses this as upstream via
+# DNS_UPSTREAM_PLAIN_ADDRESSES=127.0.0.1:5353.
+services:
+  dnsmasq:
+    build: .
+    container_name: tailbox-dns
+    network_mode: "container:mullvad-gateway"
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+    read_only: true
+    volumes:
+      - ./dnsmasq.conf:/etc/dnsmasq.conf:ro
+    labels:
+      - autoheal=true
+    healthcheck:
+      test: ["CMD-SHELL", "nslookup example.com 127.0.0.1 -port=5353 >/dev/null 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 32M
+          cpus: '0.05'

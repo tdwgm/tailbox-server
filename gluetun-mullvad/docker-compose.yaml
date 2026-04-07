@@ -1,0 +1,121 @@
+# Gluetun VPN gateway (Mullvad WireGuard)
+#
+# This is the VPN gateway for all sidecar containers that need to route
+# traffic through the Mullvad tunnel. Add sidecar containers by:
+#   1. Adding the service with `network_mode: "container:mullvad-gateway"`
+#   2. Exposing their ports on the gluetun service (not the sidecar)
+#   3. Adding the port(s) to FIREWALL_INPUT_PORTS
+#
+# The built-in microsocks SOCKS5 proxy is available on port 1080.
+
+services:
+  gluetun:
+    image: qmcgaw/gluetun@sha256:e4de2b8cfa165553ffca8c5b28f2a3caccacf467244e15780b065e3fe6747080
+    container_name: mullvad-gateway
+    restart: unless-stopped
+    labels:
+      - autoheal=true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_ADMIN
+    sysctls:
+      - net.ipv6.conf.all.disable_ipv6=1
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    volumes:
+      - ./data:/gluetun
+    environment:
+      - TZ=${TZ:-UTC}
+      - VPN_SERVICE_PROVIDER=mullvad
+      - VPN_TYPE=wireguard
+      - WIREGUARD_PRIVATE_KEY_SECRETFILE=/run/secrets/mullvad_wg_key
+      - WIREGUARD_ADDRESSES=${MULLVAD_ADDRESS}
+      - SERVER_COUNTRIES=${MULLVAD_COUNTRY}
+      - WIREGUARD_IMPLEMENTATION=userspace
+      - DOT=off
+      - BLOCK_MALICIOUS=off
+      - DNS_UPSTREAM_PLAIN_ADDRESSES=${DNS_UPSTREAM:-10.64.0.1}
+      - FIREWALL_OUTBOUND_SUBNETS=${LAN_NETWORK}
+      - FIREWALL_INPUT_PORTS=1080
+      - WIREGUARD_PERSISTENT_KEEPALIVE_INTERVAL=25s
+    secrets:
+      - mullvad_wg_key
+    ports:
+      - 127.0.0.1:1080:1080   # localhost only — Tailscale tunnel handles remote access
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:9999"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.50'
+    networks:
+      - tailbox-net
+
+  socket-proxy:
+    image: tecnativa/docker-socket-proxy@sha256:1f3a6f303320723d199d2316a3e82b2e2685d86c275d5e3deeaf182573b47476
+    container_name: docker-socket-proxy
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETGID
+      - SETUID
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=8m
+      - /run:rw,noexec,nosuid,size=8m
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      - CONTAINERS=1
+      - EVENTS=1
+      - POST=1
+    deploy:
+      resources:
+        limits:
+          memory: 64M
+          cpus: '0.10'
+    networks:
+      - socket-proxy-net
+
+  autoheal:
+    image: willfarrell/autoheal@sha256:81763c660e85105d5815ef308a4e64431e0e905738f506ace6bd7432c75d8fc2
+    container_name: mullvad-autoheal
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    environment:
+      - AUTOHEAL_CONTAINER_LABEL=autoheal
+      - DOCKER_SOCK=tcp://docker-socket-proxy:2375
+    deploy:
+      resources:
+        limits:
+          memory: 64M
+          cpus: '0.10'
+    networks:
+      - socket-proxy-net
+
+secrets:
+  mullvad_wg_key:
+    file: ./secrets/mullvad_wg_key.txt
+
+networks:
+  tailbox-net:
+    name: ${TAILBOX_NETWORK:-tailbox-net}
+    external: true
+  socket-proxy-net:
+    driver: bridge
+    internal: true

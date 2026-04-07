@@ -1,0 +1,83 @@
+# This stack rides on the gluetun-mullvad container's network namespace.
+# Both services use network_mode: "container:mullvad-gateway", which means
+# they share the VPN tunnel's network stack — no direct host network access.
+# The gluetun-mullvad stack must be running before this compose is started.
+
+services:
+  tailscale-endpoint:
+    image: tailscale/tailscale@sha256:95e528798bebe75f39b10e74e7051cf51188ee615934f232ba7ad06a3390ffa1
+    container_name: tailscale-endpoint
+    network_mode: "container:mullvad-gateway"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m
+      - /run:rw,noexec,nosuid,size=16m
+      - /var/run:rw,noexec,nosuid,size=8m
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    environment:
+      - TS_AUTHKEY_FILE=/run/secrets/ts_authkey
+      - TS_STATE_DIR=/var/lib/tailscale
+      - TS_USERSPACE=false
+      - TS_DEBUG_FIREWALL_MODE=nftables
+      - TS_EXTRA_ARGS=--advertise-exit-node --ssh --hostname=${TS_HOSTNAME:-tailbox-endpoint}
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        export TS_AUTHKEY=$$(cat "$$TS_AUTHKEY_FILE" | tr -d '\n')
+        exec /usr/local/bin/containerboot
+    secrets:
+      - ts_authkey
+    volumes:
+      - ./tailscale-state:/var/lib/tailscale
+    labels:
+      - autoheal=true
+    healthcheck:
+      test: ["CMD", "tailscale", "status", "--json"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.50'
+
+  microsocks:
+    image: vimagick/microsocks@sha256:7b61de9b46c40672ca7b2a95f45abf023926d9e1dfd7ecfe95d21a82506227c4
+    container_name: tailbox-socks
+    network_mode: "container:mullvad-gateway"
+    command: ["-p", "1080"]
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    user: "65534:65534"
+    labels:
+      - autoheal=true
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z 127.0.0.1 1080 || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 32M
+          cpus: '0.10'
+
+secrets:
+  ts_authkey:
+    file: ./secrets/ts_authkey.txt
