@@ -1,5 +1,9 @@
 # Tailbox Server — Mullvad VPN Gateway
 
+![Tailbox Architecture](images/header.png)
+
+> **Work in progress.** This project is functional and running in production, but is still being refined. Contributions and feedback welcome.
+
 The server side of [Tailbox](https://github.com/tdwgm/tailbox-client): a Docker Compose stack that runs a Mullvad WireGuard tunnel (via Gluetun) with a Tailscale node and a SOCKS5 proxy (microsocks) sharing the tunnel's network namespace. Clients connect over Tailscale and forward traffic through the proxy, which exits via Mullvad.
 
 All sidecar containers — Tailscale, microsocks, and the optional DNS sidecar — live inside Gluetun's network namespace. They have no direct host network access; all outbound traffic transits the VPN tunnel.
