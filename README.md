@@ -272,6 +272,21 @@ gluetun has built-in DNS proxy support and can be configured with multiple upstr
 
 This is a known limitation. Feature requests for domain-based DNS routing exist in the gluetun issue tracker (GitHub issues #3233 and #1839) but are not implemented as of the time of writing. The dnsmasq sidecar is the community-recommended pattern for split DNS with gluetun.
 
+### Rebinding Protection Bypass
+
+Even with dnsmasq correctly returning private IPs for local domains, gluetun's built-in DNS proxy has **hardcoded rebinding protection** that silently drops any DNS response containing RFC1918 addresses (192.168.x.x, 10.x.x.x, 172.16-31.x.x). This cannot be disabled. The `DNS_REBINDING_PROTECTION_EXEMPT_HOSTNAMES` setting only supports exact hostnames, not wildcards or domain suffixes, making it useless for patterns like `*.lan.example.com`.
+
+The workaround is an iptables DNAT rule (applied by `mullvad-exitnode-init.sh`) that redirects all DNS traffic in the namespace from port 53 to port 5353, bypassing gluetun's DNS proxy entirely:
+
+```bash
+iptables -t nat -A OUTPUT -p udp --dport 53 -j DNAT --to-destination 127.0.0.1:5353
+iptables -t nat -A OUTPUT -p tcp --dport 53 -j DNAT --to-destination 127.0.0.1:5353
+```
+
+With this rule, all containers in the namespace query dnsmasq directly. dnsmasq handles the split routing (local domains to LAN DNS, everything else to Mullvad DNS), and no rebinding filter interferes with the responses. The rules are idempotent and re-applied automatically by `gluetun-watcher.sh` after every gluetun restart.
+
+This does not reduce security: dnsmasq only returns private IPs for explicitly configured local domains. All other queries go to Mullvad DNS (`10.64.0.1`), which would never return private addresses.
+
 ## Adding Sidecar Containers
 
 Any container that should route its traffic through Mullvad can share the `mullvad-gateway` network namespace. Three steps:

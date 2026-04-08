@@ -2,11 +2,16 @@
 # Started by install-server.sh only when DNS_MODE=split.
 #
 # Runs in gluetun's network namespace on port 5353.
-# Gluetun's built-in DNS proxy (:53) uses this as upstream via
-# DNS_UPSTREAM_PLAIN_ADDRESSES=127.0.0.1:5353.
+# Gluetun's built-in DNS proxy has hardcoded rebinding protection that blocks
+# DNS responses containing private IPs (RFC1918). This cannot be disabled and
+# DNS_REBINDING_PROTECTION_EXEMPT_HOSTNAMES only supports exact hostnames, not
+# wildcards. The workaround is an iptables DNAT rule (in mullvad-exitnode-init.sh)
+# that redirects :53 -> :5353, bypassing gluetun's DNS proxy entirely.
 services:
   dnsmasq:
-    build: .
+    build:
+      context: .
+      dockerfile: Containerfile
     container_name: tailbox-dns
     network_mode: "container:mullvad-gateway"
     restart: unless-stopped
@@ -16,7 +21,11 @@ services:
       - ALL
     cap_add:
       - NET_BIND_SERVICE
+      - SETGID
+      - SETUID
     read_only: true
+    tmpfs:
+      - /run
     volumes:
       - ./dnsmasq.conf:/etc/dnsmasq.conf:ro
     labels:

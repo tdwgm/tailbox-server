@@ -67,4 +67,26 @@ else
     echo "Route 100.64.0.0/10 in table 51820 already exists"
 fi
 
-echo "DONE: Tailscale routing rules applied"
+# --- DNS DNAT bypass ---
+# Gluetun's built-in DNS proxy has hardcoded rebinding protection that blocks
+# DNS responses containing private/RFC1918 IPs. This breaks split DNS for local
+# domains (e.g. *.lan.example.com -> 192.168.x.x). The exempt-hostnames setting
+# only supports exact hostnames, not wildcards or suffixes.
+#
+# Workaround: redirect all DNS queries in the namespace from :53 to :5353,
+# bypassing gluetun's DNS proxy entirely. dnsmasq on :5353 handles the split
+# routing (local domains -> LAN DNS, everything else -> Mullvad DNS).
+if ! nsenter -t "$PID" -n -- iptables -t nat -C OUTPUT -p udp --dport 53 -j DNAT --to-destination 127.0.0.1:5353 2>/dev/null; then
+    nsenter -t "$PID" -n -- iptables -t nat -A OUTPUT -p udp --dport 53 -j DNAT --to-destination 127.0.0.1:5353
+    echo "Added DNS DNAT: udp :53 -> :5353"
+else
+    echo "DNS DNAT udp already exists"
+fi
+if ! nsenter -t "$PID" -n -- iptables -t nat -C OUTPUT -p tcp --dport 53 -j DNAT --to-destination 127.0.0.1:5353 2>/dev/null; then
+    nsenter -t "$PID" -n -- iptables -t nat -A OUTPUT -p tcp --dport 53 -j DNAT --to-destination 127.0.0.1:5353
+    echo "Added DNS DNAT: tcp :53 -> :5353"
+else
+    echo "DNS DNAT tcp already exists"
+fi
+
+echo "DONE: Tailscale routing and DNS rules applied"
