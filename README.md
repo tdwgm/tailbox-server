@@ -814,6 +814,8 @@ If Tailbox saved you some time or annoyance, a small tip is very welcome.
 
 ### Buy me a Lambo
 
+[![Buy me a Lambo](https://matinen.com/images/lambo-badge.png)](https://matinen.com/lambo.html)
+
 Prefer crypto? Pick a chain and copy the address:
 
 **Bitcoin (BTC)**
