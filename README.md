@@ -11,7 +11,7 @@ All sidecar containers — Tailscale, microsocks, and the optional DNS sidecar �
 ## Architecture
 
 ```
-CLIENT (Linux, Podman, rootless or root)
+CLIENT (Linux, rootless Podman by default; rootful opt-in)
 ─────────────────────────────────────────────────────────────────────
   Application (curl, browser, proxychains)
        │
@@ -22,13 +22,14 @@ CLIENT (Linux, Podman, rootless or root)
   │                                                          │
   │  ┌────────────────┐   ┌──────────────────────────────┐  │
   │  │ socat           │   │ Tailscale daemon              │  │
-  │  │ LISTEN:1081    │──▶│ (kernel tun or userspace)    │  │
-  │  │ EXEC:tailscale │   │                              │  │
+  │  │ LISTEN:1081    │──▶│ (userspace net by default;   │  │
+  │  │ EXEC:tailscale │   │  kernel tun in rootful mode) │  │
   │  │   nc <endpoint>│   │  tailscale0 / tun0           │  │
   │  │   <port>       │   └──────────┬───────────────────┘  │
   │  └────────────────┘              │                       │
   │                                  │ WireGuard / DERP      │
-  │  kill switch (iptables):         │ UDP 41641             │
+  │  kill switch (iptables,          │ UDP 41641             │
+  │   rootful opt-in only):          │                       │
   │  eth0 → DROP (except TS traffic) │                       │
   └──────────────────────────────────┼───────────────────────┘
        │ podman port map 1055→1081   │
@@ -62,6 +63,14 @@ SERVER (Linux / Docker)
   │  │ network_mode:        │                                      │
   │  │   container:mullvad  │                                      │
   │  │ Listens :5353        │                                      │
+  │  └──────────────────────┘                                      │
+  │                                                                │
+  │  ┌──────────────────────┐                                      │
+  │  │ + any sidecar        │  Add services with:                  │
+  │  │ network_mode:        │    network_mode: container:mullvad   │
+  │  │   container:mullvad  │  See "Adding Sidecar Containers"     │
+  │  │ (searxng, freshrss,  │  for a worked example.               │
+  │  │  matrix bridge, ...) │                                      │
   │  └──────────────────────┘                                      │
   │                                                                │
   │  iptables (gluetun kill switch):                               │
@@ -289,16 +298,18 @@ This does not reduce security: dnsmasq only returns private IPs for explicitly c
 
 ## Adding Sidecar Containers
 
-Any container that should route its traffic through Mullvad can share the `mullvad-gateway` network namespace. Three steps:
+Tailbox is a general-purpose Mullvad exit gateway, not just a SOCKS5 proxy. Any container that should route its traffic through Mullvad can share the `mullvad-gateway` network namespace and immediately exits through `tun0`, with zero additional VPN setup, and is simultaneously reachable over Tailscale. microsocks is just the first tenant; you can add as many sidecars as you like.
+
+Three steps to add a new service:
 
 1. **Add the service** to `tailscale-endpoint/docker-compose.yaml` (or a new compose file) with:
    ```yaml
    network_mode: "container:mullvad-gateway"
    ```
-2. **Expose its port** on the `gluetun` service in `gluetun-mullvad/docker-compose.yaml` (not on the sidecar itself — it has no independent network):
+2. **Expose its port** on the `gluetun` service in `gluetun-mullvad/docker-compose.yaml` (not on the sidecar itself, it has no independent network):
    ```yaml
    ports:
-     - "8080:8080"
+     - "127.0.0.1:8080:8080"
    ```
 3. **Allow the port inbound** in Gluetun's firewall by adding it to `FIREWALL_INPUT_PORTS` in `.env`:
    ```dotenv
@@ -306,6 +317,60 @@ Any container that should route its traffic through Mullvad can share the `mullv
    ```
 
 Then add the container name to `DEPENDENT_CONTAINERS` in `gluetun-watcher.sh` so it is automatically recreated when the VPN restarts.
+
+### Worked Example: SearXNG Behind Mullvad
+
+As a concrete example, here is how you would run a private [SearXNG](https://github.com/searxng/searxng) metasearch instance that exits through Mullvad (so Google, Bing, and the other upstream engines never see your home IP address):
+
+**1. Add the service.** In `tailscale-endpoint/docker-compose.yaml` (or a new compose file next to it):
+
+```yaml
+  searxng:
+    image: searxng/searxng:latest
+    container_name: tailbox-searxng
+    network_mode: "container:mullvad-gateway"
+    environment:
+      - SEARXNG_BASE_URL=http://localhost:8080/
+    volumes:
+      - ./searxng-config:/etc/searxng
+    restart: unless-stopped
+    depends_on:
+      mullvad-gateway:
+        condition: service_healthy
+```
+
+**2. Expose the port on gluetun.** In `gluetun-mullvad/docker-compose.yaml`, add port 8080 to the existing `ports:` block on the `mullvad-gateway` service:
+
+```yaml
+    ports:
+      - "127.0.0.1:1080:1080"   # microsocks (existing)
+      - "127.0.0.1:8080:8080"   # searxng WebUI
+```
+
+Binding to `127.0.0.1` keeps the WebUI off the LAN; it stays reachable via Tailscale if you want remote access.
+
+**3. Allow the port in the gluetun firewall.** In `gluetun-mullvad/.env`:
+
+```dotenv
+FIREWALL_INPUT_PORTS=1080,8080
+```
+
+**4. Register for auto-recreate.** Edit `gluetun-watcher.sh` and add the container to `DEPENDENT_CONTAINERS`:
+
+```bash
+DEPENDENT_CONTAINERS=("tailbox-socks" "tailbox-dns" "tailbox-searxng")
+```
+
+Bring the stack up:
+
+```bash
+docker compose -f gluetun-mullvad/docker-compose.yaml up -d
+docker compose -f tailscale-endpoint/docker-compose.yaml up -d
+```
+
+SearXNG's WebUI is now available on `http://localhost:8080` on the host and on `http://<server-tailscale-name>:8080` from any device on your Tailscale mesh. Every upstream query SearXNG makes exits through Mullvad. DNS goes through the split DNS setup, so local overrides still work.
+
+The same pattern fits anything else you want to hide behind Mullvad: a FreshRSS feed reader, a headless Chromium scraper, a Matrix or IRC bridge, a self-hosted Invidious or Nitter frontend, or a second SOCKS5 proxy on a different port. From gluetun's perspective they are all just more loopback listeners sharing `tun0`.
 
 ## Security Hardening
 
