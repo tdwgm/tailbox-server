@@ -806,6 +806,56 @@ docker exec mullvad-gateway iptables -L INPUT -n
 
 The client side of Tailbox is a separate repository: [tailbox-client](https://github.com/tdwgm/tailbox-client).
 
+## Donations
+
+If Tailbox saved you some time or annoyance, a small tip is very welcome.
+
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/B0B11SS684)
+
+### Buy me a Lambo
+
+Prefer crypto? Pick a chain and copy the address:
+
+**Bitcoin (BTC)**
+```
+bc1qqtsutnq3fcmxqjl5487yl4xrxxlqn5mwfk3xqq
+```
+
+**Ethereum (ETH)**
+```
+0xE9F90c7af7b39D416A34039302258A45CAC05Cdb
+```
+
+**Solana (SOL)**
+```
+TmzoiT1FnewedWEPza8BzQVuGuNhdFi45NBDpJU9qbT
+```
+
+**Cardano (ADA)**
+```
+addr1qyyjvem0453rq9jz8s536nd3k63x2gmlk2we6eh24rn2nfy6hyw6g9meark9yuc7ad8c029jdjdc54rntd46mug6qn0qsk28y9
+```
+
+**Tron (TRX)**
+```
+TFeT7yXCXXVvP1k8xrGmkczgDiG3z3XroT
+```
+
+**Dogecoin (DOGE)**
+```
+D67WrLjuz5xwU8Qr8FjAEZKhyZCgoknBCA
+```
+
+**Toncoin (TON)**
+```
+UQCQG0tHsfyWQKII21MJuYvVwkRmfuXmZNAW-mHIr6FqLB8q
+```
+
+**Monero (XMR)**
+```
+49DqcTdSUUiQXnBWFRanyeBJMFLuUF6Vu5tuPCZQ45rUC26TMkMjkxf56d47z25umxDhtn4apdSo6NWMX9wrQVY53RaqyYA
+```
+
 ## License
 
 MIT — see [LICENSE](LICENSE).
