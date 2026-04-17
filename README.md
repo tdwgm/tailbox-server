@@ -20,12 +20,12 @@ CLIENT (Linux, rootless Podman by default; rootful opt-in)
   ┌──────────────────────────────────────────────────────────┐
   │  tailbox container  (tailscale-local:latest)             │
   │                                                          │
-  │  ┌────────────────┐   ┌──────────────────────────────┐  │
-  │  │ socat           │   │ Tailscale daemon              │  │
-  │  │ LISTEN:1081    │──▶│ (userspace net by default;   │  │
-  │  │ EXEC:tailscale │   │  kernel tun in rootful mode) │  │
-  │  │   nc <endpoint>│   │  tailscale0 / tun0           │  │
-  │  │   <port>       │   └──────────┬───────────────────┘  │
+  │  ┌────────────────┐   ┌──────────────────────────────┐   │
+  │  │ socat           │   │ Tailscale daemon            │   │
+  │  │ LISTEN:1081    │──▶│ (userspace net by default;  │   │
+  │  │ EXEC:tailscale │   │  kernel tun in rootful mode) │   │
+  │  │   nc <endpoint>│   │  tailscale0 / tun0           │   │
+  │  │   <port>       │   └──────────┬───────────────────┘   │
   │  └────────────────┘              │                       │
   │                                  │ WireGuard / DERP      │
   │  kill switch (iptables,          │ UDP 41641             │
@@ -50,13 +50,13 @@ SERVER (Linux / Docker)
   │               tun0 (Mullvad WireGuard)                         │
   │               tailscale0 (Tailscale)                           │
   │                                                                │
-  │  ┌──────────────────────┐   ┌─────────────────────────────┐   │
-  │  │ tailscale-endpoint   │   │ tailbox-socks (microsocks)  │   │
-  │  │ network_mode:        │   │ network_mode:               │   │
-  │  │   container:mullvad  │   │   container:mullvad         │   │
-  │  │ Tailscale daemon     │   │ Listens :1080               │   │
-  │  │ tailscale0           │   │ Proxies to tun0             │   │
-  │  └──────────────────────┘   └─────────────────────────────┘   │
+  │  ┌──────────────────────┐   ┌─────────────────────────────┐    │
+  │  │ tailscale-endpoint   │   │ tailbox-socks (microsocks)  │    │
+  │  │ network_mode:        │   │ network_mode:               │    │
+  │  │   container:mullvad  │   │   container:mullvad         │    │
+  │  │ Tailscale daemon     │   │ Listens :1080               │    │
+  │  │ tailscale0           │   │ Proxies to tun0             │    │
+  │  └──────────────────────┘   └─────────────────────────────┘    │
   │                                                                │
   │  ┌──────────────────────┐                                      │
   │  │ tailbox-dns (dnsmasq)│  [DNS_MODE=split only]               │
@@ -78,8 +78,8 @@ SERVER (Linux / Docker)
   │    ACCEPT tun0, lo, ESTABLISHED                                │
   │    ACCEPT FIREWALL_INPUT_PORTS (1080, ...)                     │
   │                                                                │
-  │  ip routing rules (applied by gluetun-watcher):               │
-  │    prio 100: to 100.64.0.0/10 lookup 52  (Tailscale CGNAT)    │
+  │  ip routing rules (applied by gluetun-watcher):                │
+  │    prio 100: to 100.64.0.0/10 lookup 52  (Tailscale CGNAT)     │
   │    table 51820: 100.64.0.0/10 dev tailscale0  (WireGuard table)│
   └──────────────────────────────────┬─────────────────────────────┘
                                      │
@@ -95,11 +95,11 @@ SERVER (Linux / Docker)
   Management containers (on host network / socket-proxy-net)
   ─────────────────────────────────────────────────────────
   ┌─────────────────────┐    ┌──────────────────────────────────┐
-  │ docker-socket-proxy  │    │ mullvad-autoheal (autoheal)       │
-  │ tecnativa/docker-    │◀───│ Watches label autoheal=true       │
-  │ socket-proxy         │    │ Calls Docker API via socket-proxy  │
-  │ CONTAINERS, EVENTS,  │    │ to restart unhealthy containers   │
-  │ POST only            │    └──────────────────────────────────┘
+  │ docker-socket-proxy │    │ mullvad-autoheal (autoheal)      │
+  │ tecnativa/docker-   │◀──│ Watches label autoheal=true      │
+  │ socket-proxy        │    │ Calls Docker API via socket-proxy│
+  │ CONTAINERS, EVENTS, │    │ to restart unhealthy containers  │
+  │ POST only           │    └──────────────────────────────────┘
   └─────────────────────┘
 
   ┌──────────────────────────────────────────────────────────────┐
@@ -812,7 +812,6 @@ If Tailbox saved you some time or annoyance, a small tip is very welcome.
 
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/B0B11SS684)
 
-### Buy me a Lambo
 
 [![Buy me a Lambo](https://matinen.com/images/lambo-badge.png)](https://matinen.com/lambo.html)
 
